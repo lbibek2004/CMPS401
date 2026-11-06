@@ -14,10 +14,14 @@
 ///
 /// | Equipment | Source | Confidence |
 /// | --- | --- | --- |
-/// | Dumbbells 1, 2.5, 5, then 5 lb steps to 165 | `docs/rec-center-equipment.md` | team recollection, 35 pairs, **not yet verified on the floor** |
-/// | Barbell bar weight (45 lb) | assumption | **unconfirmed** - open question 3 in the equipment doc |
-/// | Plate denominations (45/35/25/10/5/2.5) | assumption | **unconfirmed** - open question 4 |
-/// | Selectorized stack spacing (10 lb) | assumption | **unconfirmed** - no pin spacing recorded |
+/// | Dumbbells 5-125 lb in 5 lb steps | Pennington equipment list (2026-10-19) | written list |
+/// | Barbell bar weight (45 lb) | the list's 45 lb minimum on every bar station | written list |
+/// | Plate denominations (45/35/25/10/5/2.5) | assumption | the list gives only the smallest plate (2.5 lb) |
+/// | Selectorized stack spacing (10 lb) | fallback only | real machines use `equipment_loads.dart` |
+///
+/// The per-machine ranges from the equipment list live in `equipment_loads.dart`
+/// and are what the app actually rounds to; the registry below is the fallback
+/// for equipment with no load columns.
 ///
 /// Everything unconfirmed is an **injectable parameter with a named default**,
 /// and every quantizer reports [LoadQuantizer.isUnverifiedAssumption] so a
@@ -46,7 +50,7 @@ enum RoundingDirection { down, up, nearest }
 /// Rounds a desired load to a weight the gym actually has.
 abstract interface class LoadQuantizer {
   /// Human-readable description of the equipment and where its numbers came
-  /// from, e.g. "Pennington dumbbell rack (1-165 lb)".
+  /// from, e.g. "Pennington dumbbell rack (5-125 lb)".
   String get description;
 
   /// `true` when this quantizer's denominations are assumed rather than
@@ -171,15 +175,14 @@ class DiscreteLoadQuantizer implements LoadQuantizer {
       '-${formatTrimmed(maximumLoadLb)} lb)';
 }
 
-/// The Pennington dumbbell rack: 1, 2.5, 5, then 5 lb steps to 165 lb.
+/// The Pennington dumbbell rack: 5 to 125 lb in 5 lb steps, two of each.
 ///
-/// 35 pairs, matching the count in `docs/rec-center-equipment.md`. Written out
-/// literally rather than generated so it can be eyeballed against the floor.
+/// From the written equipment list (2026-10-19), which replaced an earlier
+/// from-memory 1-165 lb rack. Written out literally rather than generated so
+/// it can be eyeballed against the floor.
 const List<double> kPenningtonDumbbellRackLb = <double>[
-  1, 2.5, 5, //
-  10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, //
-  85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, //
-  150, 155, 160, 165,
+  5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, //
+  70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125,
 ];
 
 /// Dumbbell loads, **per dumbbell** - not the pair total.
@@ -194,8 +197,8 @@ final class DumbbellQuantizer extends DiscreteLoadQuantizer {
         description:
             'Pennington dumbbell rack (${formatTrimmed(rackLb.first)}'
             '-${formatTrimmed(rackLb.last)} lb, ${rackLb.length} pairs)',
-        // The rack itself is from team recollection, pending the floor walk.
-        isUnverifiedAssumption: true,
+        // From the written Pennington equipment list.
+        isUnverifiedAssumption: false,
       );
 }
 
@@ -231,7 +234,6 @@ const List<String> kLoadQuantizationAssumptions = <String>[
   'Selectorized stack spacing assumed 10 lb - no pin spacing has been recorded.',
   'Bench press and incline bench press are assumed plate-loaded; if Pennington '
       'runs selectorized benches, re-map them in LoadQuantizerRegistry.',
-  'The dumbbell rack itself is team recollection, not a verified count.',
 ];
 
 /// Bar weight plus **symmetric pairs** of plates.

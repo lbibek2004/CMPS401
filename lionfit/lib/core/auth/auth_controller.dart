@@ -76,6 +76,26 @@ class AuthController {
 
   Future<void> signOut() => _guard(() => _auth.signOut());
 
+  /// Changes the signed-in user's password, after proving they know the
+  /// current one - the standard guard against someone who picks up an
+  /// unlocked phone. The check is a sign-in with the current password, which
+  /// leaves the session (and the signed-in user) unchanged.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final email = _auth.currentUser?.email;
+    if (email == null) throw AuthFailure('Sign in again, then retry.');
+    try {
+      await _auth.signInWithPassword(email: email, password: currentPassword);
+    } on AuthException {
+      throw AuthFailure('Your current password is not right.');
+    } catch (_) {
+      throw AuthFailure('Something went wrong. Please try again.');
+    }
+    await _guard(() => _auth.updateUser(UserAttributes(password: newPassword)));
+  }
+
   Future<T> _guard<T>(Future<T> Function() action) async {
     try {
       return await action();
@@ -109,6 +129,13 @@ class AuthController {
     if (message.contains('already registered') ||
         message.contains('already been registered')) {
       return 'An account with that email already exists. Try signing in.';
+    }
+    if (message.contains('should be different')) {
+      return 'That is already your password. Pick a new one.';
+    }
+    if (message.contains('reauthentication') ||
+        message.contains('reauthenticate')) {
+      return 'For security, sign out and back in, then change your password.';
     }
     if (message.contains('password should be')) {
       return 'Password must be at least 6 characters.';

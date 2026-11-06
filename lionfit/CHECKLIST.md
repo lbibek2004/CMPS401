@@ -1,10 +1,83 @@
 # LionFit — Next Session Checklist
 
-Updated 2026-10-11. Most of this list is now **done**. What's left is one dashboard click, one
+Updated 2026-11-05. Most of this list is now **done**. What's left is one dashboard click, one
 floor walk, and two small art decisions.
 
 Goals: **(a)** app usable on web, **(b)** landing + login/signup with a seeded `Pao` admin,
 **(c)** start the recommendation engine.
+
+---
+
+## 🆕 2026-11-05 (latest) — Health Connect on Android
+
+- [ ] **Run it on the Pixel**: `flutter run -d 37291FDJG0058R --dart-define-from-file=.env`
+      (a full run, not a hot restart - the manifest and `MainActivity` changed). On Home,
+      "Today's activity" → **Connect** → allow all three → steps and heart rate appear.
+- [ ] **Fitbit data**: in the Google Health (Fitbit) app, turn on sharing to Health Connect for
+      Steps, Heart rate and Resting heart rate, or the card only shows what the phone counts.
+- [ ] **Privacy link**: Settings → Health Connect → App permissions → LionFit → the privacy
+      policy link should open LionFit on "Health data and privacy".
+- [ ] **Decline path**: deny once, then "Open Health Connect" should land in its settings.
+- [ ] **Before any Play Store release**: Play Console → App content → *Health apps* declaration
+      for the three read permissions, and a hosted privacy policy URL saying what
+      `/health-privacy` says. Not needed for `flutter run` / sideloaded builds.
+
+---
+
+## 🆕 2026-11-05 (later) — admin page
+
+- [ ] **Re-promote Pao after the user wipe.** Sign up as Pao, then in the SQL Editor:
+      `update public.profiles set role = 'admin' where id = (select id from auth.users where email = '<pao email>');`
+      Until then nobody sees Admin tools (correct - there is no admin).
+- [ ] **Try the admin page as Pao**: mark a machine Out of service and check its exercises leave
+      the plan and the swap list; bring it back. Retire and restore an exercise.
+- [ ] **Try it as a member**: no Admin tools in the menu, and typing `/admin` lands on Home.
+
+---
+
+## 🆕 2026-11-05 — owed after the survey / nav / timer work
+
+- [x] ~~Restore `assets/muscleAnatomy.glb`~~ — restored; `pubspec.yaml` now ships only the GLB
+      and the 192 px logo.
+- [ ] **Apply migration 0009 — this is why there is no survey.** Checked against the live
+      project on 2026-11-05: `user_strength_baselines`, `user_plan_swaps` and
+      `profiles.onboarding_completed_at` do not exist yet. Dashboard → SQL Editor → paste
+      `supabase/migrations/20261105000009_onboarding_profile_and_plan_swaps.sql` → Run, then the
+      checks at the bottom. Until it runs: no survey, W-Number/experience/target effort/rest
+      timer/bodyweight are hidden in Edit profile, theme is not saved across devices, and plan
+      swaps last only until the app restarts. Everything else works.
+- [ ] **Privacy check for 0009.** Sign in as a second non-admin account and run
+      `select * from user_strength_baselines; select * from user_plan_swaps;` — zero rows.
+- [ ] **Click through in a browser and on the Pixel**: survey → plan → Replace → Log; the full-screen
+      rest timer and its 3 s buzz on the phone (web vibration only works in Android Chrome); swiping tabs;
+      the hamburger (Edit / Retake survey / Theme / Log out); password change.
+- [ ] **Rest timer with the app in the background.** The buzz fires from an in-app timer, so it
+      only fires while LionFit is open. A scheduled notification (CLAUDE.md → Logging) is
+      still to build.
+- [ ] **Icons**: every exported PNG/ICO in `assets/` has the heartbeat line *cut out*
+      (transparent), not white — on a dark tab or home screen it shows the background through.
+      The generated Android adaptive icon and web maskable icons use the flat
+      `Golden Lion Fitness S Icon.png` and have the white line. Re-export the others if the
+      cut-out is not intended.
+
+---
+
+## 🆕 2026-10-19 — owed after the equipment list + coach work
+
+- [ ] **Apply migration 0008.** Dashboard → SQL Editor → paste
+      `supabase/migrations/20261019000008_pennington_equipment_list.sql` → Run. Then run the three
+      check queries at the bottom of that file (each should return zero rows). Until this runs,
+      the app still works but loads round to the old fallback tables and the 50 new exercises
+      do not exist.
+- [ ] **Deploy the coach function (optional).** Create a Gemini key, then the four commands in
+      `docs/ai-coach.md`. Without it the app shows the engine's own sentences — nothing breaks.
+      Note: Gemini 1.5 Flash-8B was shut down in 2025; the function defaults to
+      `gemini-3.5-flash-lite`.
+- [ ] **Click through in a browser.** Not yet done: home plan/progress, the folding logger, the
+      history slider/dropdown, and especially **tapping a muscle on the 3D model** (the list rows
+      are tested; the 3D tap needs a real WebGL page).
+- [ ] **Kettlebell denominations and medicine-ball unit** — see the end of
+      `docs/rec-center-equipment.md`.
 
 ---
 

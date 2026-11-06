@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../core/router/app_router.dart';
 import '../../../core/theme/lionfit_tokens.dart';
 import '../../../core/training/models.dart';
 import '../../../core/training/muscle_labels.dart';
 import '../../../core/training/muscle_status.dart';
 import '../../workout/data/workout_repository.dart';
 import '../../workout/domain/workout_models.dart';
+import 'muscle_detail_sheet.dart';
 import 'muscle_model_view.dart';
 
 /// The user's chosen window. Null = the default ("longest with data").
@@ -57,18 +56,6 @@ class MuscleMapScreen extends ConsumerWidget {
     final report = ref.watch(muscleStatusProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => context.go(Routes.home)),
-        title: const Text('Muscle map'),
-        actions: [
-          TextButton.icon(
-            onPressed: () => context.go(Routes.logWorkout),
-            icon: const Icon(Icons.add),
-            label: const Text('Log sets'),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
       body: report.when(
         skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -113,11 +100,21 @@ class _MapLayout extends StatelessWidget {
         '${report.countWith(MuscleTrainingStatus.lessTrained)} less trained, '
         '${report.countWith(MuscleTrainingStatus.untrained)} untrained.';
 
+    void open(MuscleGroup group) => showMuscleDetailSheet(
+      context,
+      entry: report.byMuscleGroup[group]!,
+      windowDays: report.windowDays,
+    );
+
     final model = ClipRRect(
       borderRadius: BorderRadius.circular(tokens.radiusLg),
-      child: MuscleModelView(colors: colors, semanticsLabel: summary),
+      child: MuscleModelView(
+        colors: colors,
+        semanticsLabel: summary,
+        onMuscleTap: open,
+      ),
     );
-    final panel = _Panel(report: report);
+    final panel = _Panel(report: report, onOpen: open);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -157,9 +154,10 @@ class _MapLayout extends StatelessWidget {
 }
 
 class _Panel extends StatelessWidget {
-  const _Panel({required this.report});
+  const _Panel({required this.report, required this.onOpen});
 
   final MuscleStatusReport report;
+  final ValueChanged<MuscleGroup> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -187,6 +185,14 @@ class _Panel extends StatelessWidget {
             height: 1.4,
           ),
         ),
+        const SizedBox(height: 4),
+        Text(
+          'Tap a muscle on the model or in the list for what trained it '
+          'and what to do next.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
         if (!report.hasAnyTraining) ...[
           const SizedBox(height: 16),
           Text(
@@ -198,7 +204,8 @@ class _Panel extends StatelessWidget {
         const SizedBox(height: 16),
         Divider(height: 1, color: scheme.outlineVariant),
         const SizedBox(height: 8),
-        for (final entry in entries) _MuscleRow(entry: entry),
+        for (final entry in entries)
+          _MuscleRow(entry: entry, onTap: () => onOpen(entry.group)),
       ],
     );
   }
@@ -313,38 +320,47 @@ class _Swatch extends StatelessWidget {
 }
 
 class _MuscleRow extends StatelessWidget {
-  const _MuscleRow({required this.entry});
+  const _MuscleRow({required this.entry, required this.onTap});
 
   final MuscleStatusEntry entry;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = LionFitTokens.of(context);
     final sets = formatTrimmed((entry.hardSets * 10).round() / 10);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          _Swatch(color: statusColor(tokens, entry.status)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              muscleGroupLabel(entry.group),
-              style: theme.textTheme.bodyLarge,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              '$sets ${entry.hardSets == 1 ? 'set' : 'sets'} · ${entry.status.label}',
-              textAlign: TextAlign.end,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(tokens.radiusSm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        child: Row(
+          children: [
+            _Swatch(color: statusColor(tokens, entry.status)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                muscleGroupLabel(entry.group),
+                style: theme.textTheme.bodyLarge,
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                '$sets ${entry.hardSets == 1 ? 'set' : 'sets'} · ${entry.status.label}',
+                textAlign: TextAlign.end,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
       ),
     );
   }

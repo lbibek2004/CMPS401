@@ -23,16 +23,16 @@ void main() {
       expect(exercise.primaryMuscleGroups, [MuscleGroup.lats]);
       expect(exercise.secondaryMuscleGroups, [MuscleGroup.biceps]);
       expect(exercise.unmappedRegions, [UnmappedRegion.rhomboids]);
-      expect(exercise.isDemoData, isFalse);
+      expect(exercise.isActive, isTrue);
     });
 
-    test('flags demo rows by their notes prefix', () {
-      final demo = CatalogExercise.fromRow({
-        ...row,
-        'notes': 'DEMO: uses placeholder equipment.',
-      });
-      expect(demo.isDemoData, isTrue);
-    });
+    test(
+      'reads is_active so retired exercises can be kept but not offered',
+      () {
+        final retired = CatalogExercise.fromRow({...row, 'is_active': false});
+        expect(retired.isActive, isFalse);
+      },
+    );
 
     test('maps database equipment slugs onto the engine enum', () {
       expect(

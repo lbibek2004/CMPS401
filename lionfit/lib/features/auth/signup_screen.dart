@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lionfit/core/auth/auth_controller.dart';
-import 'package:lionfit/core/router/app_router.dart';
+import 'package:lionfit/core/router/routes.dart';
 
 import 'domain/auth_validators.dart';
 import 'widgets/auth_form_shell.dart';

@@ -1,51 +1,69 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../core/router/app_router.dart';
 import '../../../core/theme/lionfit_tokens.dart';
 import '../../../core/training/models.dart';
 import '../../../core/training/muscle_labels.dart';
+import '../../../core/training/one_rep_max.dart';
+import '../../coach/data/coach_providers.dart';
 import '../data/workout_repository.dart';
+import '../domain/training_profile.dart';
 import '../domain/workout_models.dart';
+import 'effort_slider.dart';
 import 'exercise_picker_sheet.dart';
+import 'set_form.dart';
 
 /// `/log` - today's session: add exercises from the catalog, log sets.
 ///
+/// **One exercise is open at a time.** Adding an exercise opens it and folds
+/// every other card down to a one-line summary; "Done" folds the open one;
+/// "Edit" on a summary reopens it, where each set can be edited or deleted.
+/// Exercises that already have sets start folded when the screen opens.
+///
 /// The session row is created on the first logged set, not on open, so
 /// browsing this screen never leaves an empty workout behind.
-class LogWorkoutScreen extends ConsumerWidget {
+class LogWorkoutScreen extends ConsumerStatefulWidget {
   const LogWorkoutScreen({super.key});
 
-  Future<void> _addExercise(BuildContext context, WidgetRef ref) async {
+  @override
+  ConsumerState<LogWorkoutScreen> createState() => _LogWorkoutScreenState();
+}
+
+class _LogWorkoutScreenState extends ConsumerState<LogWorkoutScreen> {
+  /// The one open card. Null = everything folded.
+  String? _openId;
+  bool _initialised = false;
+
+  Future<void> _addExercise() async {
     final picked = await showExercisePicker(context);
-    if (picked != null) {
-      ref.read(todaySessionProvider.notifier).addExercise(picked.id);
+    if (picked == null) return;
+    ref.read(todaySessionProvider.notifier).addExercise(picked.id);
+    setState(() => _openId = picked.id);
+  }
+
+  void _pickInitialOpen(TodaySession session) {
+    if (_initialised) return;
+    _initialised = true;
+    // Open the first exercise that has nothing logged yet, if any.
+    for (final id in session.exerciseOrder) {
+      if (session.setsFor(id).isEmpty) {
+        _openId = id;
+        return;
+      }
     }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final session = ref.watch(todaySessionProvider);
     final catalog = ref.watch(exerciseCatalogProvider);
+    if (session case AsyncData(:final value)) _pickInitialOpen(value);
 
+    // No app bar: the shell's navigation carries the title.
     return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => context.go(Routes.home)),
-        title: const Text("Today's workout"),
-        actions: [
-          TextButton.icon(
-            onPressed: () => context.go(Routes.muscleMap),
-            icon: const Icon(Icons.accessibility_new_outlined),
-            label: const Text('Muscle map'),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
       floatingActionButton: session.hasValue
           ? FloatingActionButton.extended(
-              onPressed: () => _addExercise(context, ref),
+              onPressed: _addExercise,
               icon: const Icon(Icons.add),
               label: const Text('Add exercise'),
             )
@@ -60,7 +78,9 @@ class LogWorkoutScreen extends ConsumerWidget {
         (AsyncData(value: final s), AsyncData(value: final c)) => _SessionBody(
           session: s,
           exercisesById: {for (final e in c) e.id: e},
-          onAddExercise: () => _addExercise(context, ref),
+          openId: _openId,
+          onOpen: (id) => setState(() => _openId = id),
+          onAddExercise: _addExercise,
         ),
         _ => const Center(child: CircularProgressIndicator()),
       },
@@ -72,11 +92,15 @@ class _SessionBody extends StatelessWidget {
   const _SessionBody({
     required this.session,
     required this.exercisesById,
+    required this.openId,
+    required this.onOpen,
     required this.onAddExercise,
   });
 
   final TodaySession session;
   final Map<String, CatalogExercise> exercisesById;
+  final String? openId;
+  final ValueChanged<String?> onOpen;
   final VoidCallback onAddExercise;
 
   @override
@@ -93,7 +117,7 @@ class _SessionBody extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                _dateLabel(session.day),
+                longDateLabel(session.day),
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -116,11 +140,23 @@ class _SessionBody extends StatelessWidget {
                 for (final id in session.exerciseOrder)
                   if (exercisesById[id] case final exercise?)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: _ExerciseCard(
-                        key: ValueKey(id),
-                        exercise: exercise,
-                        sets: session.setsFor(id),
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: AnimatedSize(
+                        duration: const Duration(milliseconds: 200),
+                        alignment: Alignment.topCenter,
+                        child: id == openId
+                            ? _OpenExerciseCard(
+                                key: ValueKey('open-$id'),
+                                exercise: exercise,
+                                sets: session.setsFor(id),
+                                onDone: () => onOpen(null),
+                              )
+                            : _FoldedExerciseCard(
+                                key: ValueKey('folded-$id'),
+                                exercise: exercise,
+                                sets: session.setsFor(id),
+                                onEdit: () => onOpen(id),
+                              ),
                       ),
                     ),
             ],
@@ -129,33 +165,55 @@ class _SessionBody extends StatelessWidget {
       ),
     );
   }
+}
 
-  static const _weekdays = [
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday',
-  ];
-  static const _months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
+const _weekdays = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+];
+const _months = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
 
-  static String _dateLabel(DateTime day) =>
-      '${_weekdays[day.weekday - 1]}, ${_months[day.month - 1]} ${day.day}';
+/// "Monday, October 19".
+String longDateLabel(DateTime day) =>
+    '${_weekdays[day.weekday - 1]}, ${_months[day.month - 1]} ${day.day}';
+
+/// "Mon, Oct 19".
+String shortDateLabel(DateTime day) =>
+    '${_weekdays[day.weekday - 1].substring(0, 3)}, '
+    '${_months[day.month - 1].substring(0, 3)} ${day.day}';
+
+/// The heaviest set by estimated 1RM, or the most reps without load.
+SetRecord? bestSetOf(List<SetRecord> sets) {
+  SetRecord? best;
+  double? bestScore;
+  for (final set in sets) {
+    if (!set.setType.countsAsVolume) continue;
+    final score =
+        e1rmForSet(set.toLoggedSet()) ?? (set.reps ?? 0).toDouble() / 1000;
+    if (bestScore == null || score > bestScore) {
+      best = set;
+      bestScore = score;
+    }
+  }
+  return best ?? (sets.isEmpty ? null : sets.first);
 }
 
 class _EmptySession extends StatelessWidget {
@@ -206,25 +264,183 @@ class _EmptySession extends StatelessWidget {
   }
 }
 
-class _ExerciseCard extends ConsumerWidget {
-  const _ExerciseCard({super.key, required this.exercise, required this.sets});
+BoxDecoration _cardDecoration(BuildContext context, {bool open = false}) {
+  final scheme = Theme.of(context).colorScheme;
+  return BoxDecoration(
+    color: scheme.surfaceContainerLow,
+    borderRadius: BorderRadius.circular(LionFitTokens.of(context).radiusLg),
+    border: Border.all(
+      color: open ? scheme.primary : scheme.outlineVariant,
+      width: open ? 1.5 : 1,
+    ),
+  );
+}
+
+/// One line per exercise once it is recorded: name, set count, best set.
+class _FoldedExerciseCard extends ConsumerWidget {
+  const _FoldedExerciseCard({
+    super.key,
+    required this.exercise,
+    required this.sets,
+    required this.onEdit,
+  });
 
   final CatalogExercise exercise;
   final List<SetRecord> sets;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final tokens = LionFitTokens.of(context);
+    final best = bestSetOf(sets);
+    final summary = sets.isEmpty
+        ? 'No sets yet'
+        : '${sets.length} ${sets.length == 1 ? 'set' : 'sets'}'
+              '${best == null ? '' : ' · best ${describeSet(best)}'}';
+
+    return Container(
+      decoration: _cardDecoration(context),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(LionFitTokens.of(context).radiusLg),
+        onTap: onEdit,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+          child: Row(
+            children: [
+              Icon(
+                sets.isEmpty
+                    ? Icons.radio_button_unchecked
+                    : Icons.check_circle,
+                color: sets.isEmpty ? scheme.onSurfaceVariant : scheme.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      exercise.name,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      summary,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (sets.isEmpty)
+                IconButton(
+                  tooltip: 'Remove ${exercise.name}',
+                  onPressed: () => ref
+                      .read(todaySessionProvider.notifier)
+                      .removeExercise(exercise.id),
+                  icon: const Icon(Icons.close),
+                ),
+              TextButton.icon(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: Text(sets.isEmpty ? 'Log' : 'Edit'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OpenExerciseCard extends ConsumerStatefulWidget {
+  const _OpenExerciseCard({
+    super.key,
+    required this.exercise,
+    required this.sets,
+    required this.onDone,
+  });
+
+  final CatalogExercise exercise;
+  final List<SetRecord> sets;
+  final VoidCallback onDone;
+
+  @override
+  ConsumerState<_OpenExerciseCard> createState() => _OpenExerciseCardState();
+}
+
+class _OpenExerciseCardState extends ConsumerState<_OpenExerciseCard> {
+  /// The set being edited in place, if any.
+  String? _editingSetId;
+
+  void _showError(Object error, String what) {
+    final text = error.toString();
+    final offline =
+        text.contains('SocketException') ||
+        text.contains('Failed to fetch') ||
+        text.contains('ClientException');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          offline
+              ? '$what: no connection. Your input is still here - try again.'
+              : '$what: $text',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _logSet(NewSet set) async {
+    try {
+      // Saving the set also starts the rest timer (TodaySessionController).
+      await ref.read(todaySessionProvider.notifier).logSet(set);
+    } catch (error) {
+      if (mounted) _showError(error, 'Set not saved');
+      rethrow;
+    }
+  }
+
+  Future<void> _updateSet(String id, NewSet set) async {
+    try {
+      await ref.read(todaySessionProvider.notifier).updateSet(id, set);
+      if (mounted) setState(() => _editingSetId = null);
+    } catch (error) {
+      if (mounted) _showError(error, 'Set not updated');
+      rethrow;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final exercise = widget.exercise;
+    final sets = widget.sets;
+    final profile =
+        ref.watch(trainingProfileProvider).value ?? const TrainingProfile();
+    final suggestion = sets.isEmpty
+        ? ref.watch(coachEngineProvider).value?.suggestFor(exercise)
+        : null;
+    final last = sets.isEmpty ? null : sets.last;
+
+    // Pre-fill: the last set if there is one (the next set is usually the
+    // same), else the coach's suggestion, else blank. Effort starts on the
+    // profile's preferred scale so the slider is one drag away.
+    final draft = last != null
+        ? SetDraft.fromSet(last)
+        : SetDraft(
+            weight: suggestion?.weight,
+            unit: suggestion?.unit ?? profile.unit,
+            reps: suggestion?.reps,
+            effort: EffortEntry.defaultFor(profile.effortScale),
+          );
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 12, 20),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(tokens.radiusLg),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
+      decoration: _cardDecoration(context, open: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -247,12 +463,12 @@ class _ExerciseCard extends ConsumerWidget {
                       runSpacing: 6,
                       children: [
                         for (final group in exercise.primaryMuscleGroups)
-                          _MuscleTag(
+                          MuscleTag(
                             label: muscleGroupLabel(group),
                             primary: true,
                           ),
                         for (final group in exercise.secondaryMuscleGroups)
-                          _MuscleTag(
+                          MuscleTag(
                             label: muscleGroupLabel(group),
                             primary: false,
                           ),
@@ -263,31 +479,103 @@ class _ExerciseCard extends ConsumerWidget {
               ),
               if (sets.isEmpty)
                 IconButton(
-                  tooltip: 'Remove exercise',
-                  onPressed: () => ref
-                      .read(todaySessionProvider.notifier)
-                      .removeExercise(exercise.id),
+                  tooltip: 'Remove ${exercise.name}',
+                  onPressed: () {
+                    ref
+                        .read(todaySessionProvider.notifier)
+                        .removeExercise(exercise.id);
+                    widget.onDone();
+                  },
                   icon: const Icon(Icons.close),
+                )
+              else
+                FilledButton.tonal(
+                  onPressed: widget.onDone,
+                  child: const Text('Done'),
                 ),
             ],
           ),
+          if (suggestion != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: scheme.secondaryContainer,
+                borderRadius: BorderRadius.circular(
+                  LionFitTokens.of(context).radiusSm,
+                ),
+              ),
+              child: Text(
+                'Suggested: ${suggestion.prescription}. ${suggestion.reason}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSecondaryContainer,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
           if (sets.isNotEmpty) ...[
             const SizedBox(height: 12),
-            for (final set in sets) _SetRow(set: set),
+            for (final set in sets)
+              if (set.id == _editingSetId)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(
+                        LionFitTokens.of(context).radiusSm,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Edit set ${set.setIndex}',
+                          style: theme.textTheme.labelLarge,
+                        ),
+                        const SizedBox(height: 12),
+                        SetForm(
+                          key: ValueKey('edit-${set.id}'),
+                          exercise: exercise,
+                          initial: SetDraft.fromSet(set),
+                          submitLabel: 'Save',
+                          onSubmit: (updated) => _updateSet(set.id, updated),
+                          onCancel: () => setState(() => _editingSetId = null),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                _SetRow(
+                  set: set,
+                  onEdit: () => setState(() => _editingSetId = set.id),
+                ),
           ],
-          const SizedBox(height: 12),
-          _AddSetForm(
-            exercise: exercise,
-            previous: sets.isEmpty ? null : sets.last,
-          ),
+          if (_editingSetId == null) ...[
+            const SizedBox(height: 16),
+            SetForm(
+              // Re-keyed per set count so the pre-fill follows the last set,
+              // and once more when the coach's suggestion finishes loading.
+              key: ValueKey(
+                'add-${exercise.id}-${sets.length}-${suggestion != null}',
+              ),
+              exercise: exercise,
+              initial: draft,
+              submitLabel: 'Log set ${sets.length + 1}',
+              onSubmit: _logSet,
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _MuscleTag extends StatelessWidget {
-  const _MuscleTag({required this.label, required this.primary});
+class MuscleTag extends StatelessWidget {
+  const MuscleTag({super.key, required this.label, required this.primary});
 
   final String label;
   final bool primary;
@@ -315,10 +603,46 @@ class _MuscleTag extends StatelessWidget {
   }
 }
 
-class _SetRow extends ConsumerStatefulWidget {
-  const _SetRow({required this.set});
+/// The numbered chip for a set, coloured by set type.
+class SetIndexChip extends StatelessWidget {
+  const SetIndexChip({super.key, required this.set});
 
   final SetRecord set;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = LionFitTokens.of(context);
+    final (fill, ink) = switch (set.setType) {
+      SetType.warmUp => (tokens.setTypeWarmUp, tokens.onSetTypeWarmUp),
+      SetType.working => (tokens.setTypeWorking, tokens.onSetTypeWorking),
+      SetType.dropSet => (tokens.setTypeDropSet, tokens.onSetTypeDropSet),
+      SetType.superSet => (tokens.setTypeSuperSet, tokens.onSetTypeSuperSet),
+    };
+    return Container(
+      width: 28,
+      height: 28,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(tokens.radiusSm),
+      ),
+      child: Text(
+        '${set.setIndex}',
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: ink,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _SetRow extends ConsumerStatefulWidget {
+  const _SetRow({required this.set, required this.onEdit});
+
+  final SetRecord set;
+  final VoidCallback onEdit;
 
   @override
   ConsumerState<_SetRow> createState() => _SetRowState();
@@ -343,35 +667,13 @@ class _SetRowState extends ConsumerState<_SetRow> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = LionFitTokens.of(context);
     final set = widget.set;
-    final (fill, ink) = switch (set.setType) {
-      SetType.warmUp => (tokens.setTypeWarmUp, tokens.onSetTypeWarmUp),
-      SetType.working => (tokens.setTypeWorking, tokens.onSetTypeWorking),
-      SetType.dropSet => (tokens.setTypeDropSet, tokens.onSetTypeDropSet),
-      SetType.superSet => (tokens.setTypeSuperSet, tokens.onSetTypeSuperSet),
-    };
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Container(
-            width: 28,
-            height: 28,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: fill,
-              borderRadius: BorderRadius.circular(tokens.radiusSm),
-            ),
-            child: Text(
-              '${set.setIndex}',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: ink,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
+          SetIndexChip(set: set),
           const SizedBox(width: 12),
           Expanded(
             child: Text.rich(
@@ -392,282 +694,16 @@ class _SetRowState extends ConsumerState<_SetRow> {
             ),
           ),
           IconButton(
+            tooltip: 'Edit set ${set.setIndex}',
+            onPressed: _deleting ? null : widget.onEdit,
+            icon: const Icon(Icons.edit_outlined, size: 20),
+          ),
+          IconButton(
             tooltip: 'Delete set ${set.setIndex}',
             onPressed: _deleting ? null : _delete,
             icon: const Icon(Icons.delete_outline, size: 20),
           ),
         ],
-      ),
-    );
-  }
-}
-
-enum _EffortKind { rpe, rir }
-
-class _AddSetForm extends ConsumerStatefulWidget {
-  const _AddSetForm({required this.exercise, this.previous});
-
-  final CatalogExercise exercise;
-  final SetRecord? previous;
-
-  @override
-  ConsumerState<_AddSetForm> createState() => _AddSetFormState();
-}
-
-class _AddSetFormState extends ConsumerState<_AddSetForm> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _weight;
-  late final TextEditingController _reps;
-  final _effort = TextEditingController();
-  late WeightUnit _unit;
-  late SetType _setType;
-  _EffortKind _effortKind = _EffortKind.rpe;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final previous = widget.previous;
-    // Pre-fill from the last set: the next set is usually the same load.
-    _weight = TextEditingController(
-      text: previous?.weight == null ? '' : formatTrimmed(previous!.weight!),
-    );
-    _reps = TextEditingController(text: previous?.reps?.toString() ?? '');
-    _unit = previous?.unit ?? WeightUnit.lb;
-    _setType = previous?.setType ?? SetType.working;
-  }
-
-  @override
-  void dispose() {
-    _weight.dispose();
-    _reps.dispose();
-    _effort.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _saving = true);
-    final effort = _effort.text.trim();
-    final weightText = _weight.text.trim();
-    try {
-      await ref
-          .read(todaySessionProvider.notifier)
-          .logSet(
-            NewSet(
-              exerciseId: widget.exercise.id,
-              setType: _setType,
-              unit: _unit,
-              weight: weightText.isEmpty ? null : double.parse(weightText),
-              reps: int.parse(_reps.text.trim()),
-              rpe: _effortKind == _EffortKind.rpe && effort.isNotEmpty
-                  ? double.parse(effort)
-                  : null,
-              rir: _effortKind == _EffortKind.rir && effort.isNotEmpty
-                  ? int.parse(effort)
-                  : null,
-            ),
-          );
-      _effort.clear();
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Set not saved: ${_describe(error)}')),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  static String _describe(Object error) {
-    final text = error.toString();
-    if (text.contains('SocketException') ||
-        text.contains('Failed to fetch') ||
-        text.contains('ClientException')) {
-      return 'no connection. Your input is still here - try again.';
-    }
-    return text;
-  }
-
-  String? _validateWeight(String? value) {
-    final text = value?.trim() ?? '';
-    if (text.isEmpty) return null; // Bodyweight.
-    final parsed = double.tryParse(text);
-    if (parsed == null || parsed < 0) return 'Enter a weight';
-    if (parsed > 2000) return 'Too heavy';
-    return null;
-  }
-
-  String? _validateReps(String? value) {
-    final parsed = int.tryParse(value?.trim() ?? '');
-    if (parsed == null || parsed < 1) return 'Reps';
-    if (parsed > 1000) return 'Too many';
-    return null;
-  }
-
-  String? _validateEffort(String? value) {
-    final text = value?.trim() ?? '';
-    if (text.isEmpty) return null; // Optional.
-    if (_effortKind == _EffortKind.rpe) {
-      final parsed = double.tryParse(text);
-      if (parsed == null || parsed < 1 || parsed > 10) return '1-10';
-    } else {
-      final parsed = int.tryParse(text);
-      if (parsed == null || parsed < 0 || parsed > 10) return '0-10';
-    }
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final decimal = [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))];
-    final digits = [FilteringTextInputFormatter.digitsOnly];
-
-    final weightField = TextFormField(
-      controller: _weight,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: decimal,
-      decoration: InputDecoration(
-        labelText: 'Weight',
-        hintText: widget.exercise.isBodyweightOnly ? 'Bodyweight' : null,
-        isDense: true,
-      ),
-      validator: _validateWeight,
-    );
-    final repsField = TextFormField(
-      controller: _reps,
-      keyboardType: TextInputType.number,
-      inputFormatters: digits,
-      decoration: const InputDecoration(labelText: 'Reps', isDense: true),
-      validator: _validateReps,
-      onFieldSubmitted: (_) => _submit(),
-    );
-    final effortField = TextFormField(
-      controller: _effort,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: _effortKind == _EffortKind.rpe ? decimal : digits,
-      decoration: InputDecoration(
-        labelText: _effortKind == _EffortKind.rpe ? 'RPE' : 'RIR',
-        hintText: 'Optional',
-        isDense: true,
-      ),
-      validator: _validateEffort,
-    );
-    final unitToggle = SegmentedButton<WeightUnit>(
-      segments: const [
-        ButtonSegment(value: WeightUnit.lb, label: Text('lb')),
-        ButtonSegment(value: WeightUnit.kg, label: Text('kg')),
-      ],
-      selected: {_unit},
-      showSelectedIcon: false,
-      onSelectionChanged: (value) => setState(() => _unit = value.first),
-    );
-    final effortToggle = SegmentedButton<_EffortKind>(
-      segments: const [
-        ButtonSegment(value: _EffortKind.rpe, label: Text('RPE')),
-        ButtonSegment(value: _EffortKind.rir, label: Text('RIR')),
-      ],
-      selected: {_effortKind},
-      showSelectedIcon: false,
-      onSelectionChanged: (value) => setState(() {
-        _effortKind = value.first;
-        _effort.clear();
-      }),
-    );
-    final typeMenu = DropdownButtonFormField<SetType>(
-      initialValue: _setType,
-      isDense: true,
-      isExpanded: true,
-      decoration: const InputDecoration(labelText: 'Set type', isDense: true),
-      items: [
-        for (final type in SetType.values)
-          DropdownMenuItem(value: type, child: Text(setTypeLabel(type))),
-      ],
-      onChanged: (value) => setState(() => _setType = value ?? _setType),
-    );
-    final submit = FilledButton.icon(
-      onPressed: _saving ? null : _submit,
-      icon: _saving
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.check),
-      label: const Text('Log set'),
-    );
-
-    return Form(
-      key: _formKey,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 560;
-          if (wide) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 3, child: weightField),
-                    const SizedBox(width: 8),
-                    unitToggle,
-                    const SizedBox(width: 12),
-                    Expanded(flex: 2, child: repsField),
-                    const SizedBox(width: 12),
-                    Expanded(flex: 3, child: typeMenu),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    effortToggle,
-                    const SizedBox(width: 12),
-                    Expanded(child: effortField),
-                    const SizedBox(width: 12),
-                    submit,
-                  ],
-                ),
-              ],
-            );
-          }
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: weightField),
-                  const SizedBox(width: 8),
-                  unitToggle,
-                ],
-              ),
-              const SizedBox(height: 12),
-              repsField,
-              const SizedBox(height: 12),
-              typeMenu,
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  effortToggle,
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      minWidth: 120,
-                      maxWidth: 200,
-                    ),
-                    child: effortField,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              submit,
-            ],
-          );
-        },
       ),
     );
   }

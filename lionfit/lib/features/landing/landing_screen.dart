@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/router/app_router.dart';
+import '../../core/router/routes.dart';
 
 /// Public marketing page at `/`.
 ///
@@ -80,12 +80,29 @@ class _TopBar extends StatelessWidget {
       spacing: 16,
       runSpacing: 8,
       children: [
-        Text(
-          'LionFit',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.4,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/android-chrome-192x192.png',
+                width: 36,
+                height: 36,
+                excludeFromSemantics: true,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                'LionFit',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.4,
+                ),
+              ),
+            ),
+          ],
         ),
         TextButton(
           onPressed: () => context.go(Routes.login),

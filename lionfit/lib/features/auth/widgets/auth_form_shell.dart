@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lionfit/core/router/app_router.dart';
+import 'package:lionfit/core/router/routes.dart';
 
 /// Shared chrome for the sign-in and sign-up screens.
 ///

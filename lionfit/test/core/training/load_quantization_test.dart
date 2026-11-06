@@ -21,34 +21,37 @@ void main() {
       expect(rack.quantize(47.5), 45);
     });
 
-    test('has the three light dumbbells before the 5 lb steps start', () {
-      expect(rack.loads.take(5), [1, 2.5, 5, 10, 15]);
-      expect(rack.loads, hasLength(35));
-      expect(rack.minimumLoadLb, 1);
-      expect(rack.maximumLoadLb, 165);
+    test('is the written Pennington rack: 5 to 125 lb in 5 lb steps', () {
+      expect(rack.loads.take(4), [5, 10, 15, 20]);
+      expect(rack.loads, hasLength(25));
+      expect(rack.minimumLoadLb, 5);
+      expect(rack.maximumLoadLb, 125);
     });
 
     test(
       'clamps to the rack rather than inventing a weight off either end',
       () {
-        expect(rack.quantize(0.25), 1);
-        expect(rack.quantize(400), 165);
-        expect(rack.stepUp(165), 165);
-        expect(rack.stepDown(1), 1);
+        expect(rack.quantize(0.25), 5);
+        expect(rack.quantize(400), 125);
+        expect(rack.stepUp(125), 125);
+        expect(rack.stepDown(5), 5);
       },
     );
 
     test('steps to the next dumbbell that actually exists', () {
       expect(rack.stepUp(40), 45);
       expect(rack.stepDown(40), 35);
-      expect(rack.stepUp(2.5), 5);
-      expect(rack.stepDown(5), 2.5);
+      expect(rack.stepUp(5), 10);
+      expect(rack.stepDown(10), 5);
     });
 
-    test('is still flagged as unverified until somebody walks the floor', () {
-      expect(rack.isUnverifiedAssumption, isTrue);
-      expect(rack.description, contains('Pennington dumbbell rack'));
-    });
+    test(
+      'comes from the written equipment list, so it is not an assumption',
+      () {
+        expect(rack.isUnverifiedAssumption, isFalse);
+        expect(rack.description, contains('Pennington dumbbell rack'));
+      },
+    );
 
     test('accepts a different rack when the floor walk corrects it', () {
       final corrected = DumbbellQuantizer(

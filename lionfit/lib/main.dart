@@ -6,6 +6,7 @@ import 'core/router/app_router.dart';
 import 'core/supabase/supabase_bootstrap.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/setup_required_screen.dart';
+import 'features/profile/data/profile_providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,7 +38,7 @@ class LionFitApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
+      themeMode: ref.watch(themeModeProvider),
       routerConfig: ref.watch(routerProvider),
     );
   }

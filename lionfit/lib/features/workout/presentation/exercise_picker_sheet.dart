@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/lionfit_tokens.dart';
 import '../../../core/training/models.dart';
 import '../../../core/training/muscle_labels.dart';
 import '../data/workout_repository.dart';
@@ -47,7 +46,7 @@ class _ExercisePickerSheetState extends ConsumerState<ExercisePickerSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final catalog = ref.watch(exerciseCatalogProvider);
+    final catalog = ref.watch(activeCatalogProvider);
     final labels = ref.watch(equipmentLabelsProvider).value ?? const {};
 
     return Center(
@@ -176,8 +175,6 @@ class _ExerciseTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = LionFitTokens.of(context);
     final muscles = exercise.primaryMuscleGroups
         .map(muscleGroupLabel)
         .join(', ');
@@ -193,27 +190,6 @@ class _ExerciseTile extends StatelessWidget {
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: exercise.isDemoData
-          ? Tooltip(
-              message:
-                  'Uses placeholder equipment that is not confirmed '
-                  'at Pennington yet.',
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(tokens.radiusPill),
-                ),
-                child: Text(
-                  'Demo',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSecondaryContainer,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            )
-          : null,
       onTap: () => Navigator.of(context).pop(exercise),
     );
   }

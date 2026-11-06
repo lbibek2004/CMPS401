@@ -22,9 +22,10 @@ Apply in filename order. Each file depends on the ones before it.
 | `20261011000003_reference_tables.sql` | `exercises`, `rec_center_equipment`, member-read / admin-write RLS |
 | `20261011000004_workout_tables.sql` | `user_workouts`, `workout_logs` (one row per set), `user_health_metrics`, owner-only RLS, indexes |
 | `20261011000005_muscle_group_intensity.sql` | The muscle-map rollup table, its recompute function, the statement-level triggers that maintain it, and `rebuild_all_muscle_group_intensity()` |
-| `20261011000006_seed_rec_center_equipment.sql` | 13 Pennington inventory rows + 2 sentinels, from `docs/rec-center-equipment.md` |
+| `20261011000006_seed_rec_center_equipment.sql` | 13 recollected inventory rows + 2 sentinels (superseded by 0008) |
 | `20261011000007_seed_exercises.sql` | 59-exercise starter catalog mapped to the 16 muscle groups and the real equipment list |
-| `20261017000008_demo_equipment_and_exercises.sql` | **DEMO placeholders**: 14 made-up equipment rows + 17 exercises using them. All marked `DEMO` in `notes`; removal SQL in the file header |
+| `20261019000008_pennington_equipment_list.sql` | **The real equipment list** from `assets/Pennington Rec Center Equipment List.docx`: adds load columns (`load_kind/min/max/step/unit`), renames 4 rows, retires the squat rack, upserts 57 rows, re-points the catalog and adds 50 exercises (106 active). Replaces the unapplied demo migration, which was deleted. |
+| `20261105000009_onboarding_profile_and_plan_swaps.sql` | Onboarding survey + profile settings: `training_experience` enum; `profiles` gains `w_number`, `experience`, `target_rpe`, `bodyweight_lb`, `rest_timer_seconds`, `theme_preference`, `onboarding_completed_at` (column grants included); new owner-only tables `user_strength_baselines` (survey lifts) and `user_plan_swaps` ("Replace" on the weekly plan). Independent of 0008. The app runs without it - survey and new settings stay off until it is applied. |
 
 Every file is safe to run twice: types are created inside `DO` blocks that swallow
 "already exists", tables use `create table if not exists`, policies are dropped before being
@@ -75,6 +76,8 @@ Run, confirm it succeeded, then move to the next. **In filename order**, one fil
 20261011000005_muscle_group_intensity.sql
 20261011000006_seed_rec_center_equipment.sql
 20261011000007_seed_exercises.sql
+20261019000008_pennington_equipment_list.sql
+20261105000009_onboarding_profile_and_plan_swaps.sql
 ```
 
 Notes for this route:
@@ -221,7 +224,12 @@ The checks that matter:
 
 ---
 
-## Known gaps, carried from `docs/rec-center-equipment.md`
+## Edge Functions
+
+`supabase/functions/coach-insights/` — Gemini phrasing for the coach. Not deployed yet; see
+`docs/ai-coach.md` for the deploy commands and how the model is kept on the facts.
+
+## Known gaps (historical — mostly resolved by 0008)
 
 The equipment seed contains only what that doc states explicitly. Deliberately **not** seeded,
 because inventing inventory would put exercises in someone's plan that they cannot perform:

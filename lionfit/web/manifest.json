@@ -3,7 +3,7 @@
     "short_name": "LionFit",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#000000",
+    "background_color": "#00492A",
     "theme_color": "#1A5634",
     "description": "AI-powered workout planner and tracker for Southeastern Louisiana University students.",
     "orientation": "any",

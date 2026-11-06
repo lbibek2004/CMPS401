@@ -19,6 +19,7 @@ final class CatalogExercise {
     this.requiredEquipment = const [],
     this.movementPattern = '',
     this.isOutdoor = false,
+    this.isActive = true,
     this.notes,
   });
 
@@ -40,6 +41,7 @@ final class CatalogExercise {
     ],
     movementPattern: (row['movement_pattern'] as String?) ?? '',
     isOutdoor: (row['is_outdoor'] as bool?) ?? false,
+    isActive: (row['is_active'] as bool?) ?? true,
     notes: row['notes'] as String?,
   );
 
@@ -54,11 +56,15 @@ final class CatalogExercise {
   final List<String> requiredEquipment;
   final String movementPattern;
   final bool isOutdoor;
+
+  /// False for retired exercises. They stay in the catalog the app loads so
+  /// old sets still have a name and a muscle mapping, but the picker, the
+  /// plan and the coach never offer them.
+  final bool isActive;
   final String? notes;
 
-  /// True for rows added by the demo-data migration (0008). Their equipment
-  /// is placeholder data, not a confirmed Pennington inventory item.
-  bool get isDemoData => notes?.startsWith('DEMO') ?? false;
+  /// Cardio rows log minutes in the reps field and have no load to progress.
+  bool get isCardio => movementPattern == 'cardio';
 
   /// Bodyweight sets have no load to enter.
   bool get isBodyweightOnly =>
@@ -89,12 +95,19 @@ final class CatalogExercise {
   ];
 
   /// The database slugs and the engine's enum predate each other; these are
-  /// the three that differ by name.
+  /// the ones that differ by name. Only the fallback quantizer reads this -
+  /// real loads come from the equipment row (`equipment_loads.dart`).
   static const _equipmentAliases = {
     'dumbbell_pair': EquipmentType.dumbbell,
     'adjustable_cable_station': EquipmentType.cableStation,
+    'functional_trainer': EquipmentType.cableStation,
+    'high_pulley': EquipmentType.tricepPushdown,
     'pec_deck_fly': EquipmentType.pecDeck,
-    'olympic_barbell': EquipmentType.barbell,
+    'seated_leg_curl': EquipmentType.hamstringCurl,
+    'hammer_iso_row': EquipmentType.backRow,
+    'dual_axis_row_rear_delt': EquipmentType.rearDeltFly,
+    'smith_machine': EquipmentType.barbell,
+    'deadlift_platform': EquipmentType.barbell,
   };
 
   static EquipmentType _engineEquipment(List<String> slugs) {

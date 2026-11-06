@@ -1,115 +1,126 @@
 # Pennington Rec Center — Equipment Inventory
 
-**Status: PARTIAL — from memory, not yet verified on the floor.**
+**Source: `assets/Pennington Rec Center Equipment List.docx` (added 2026-10-19).** This replaces
+the earlier from-memory list. It is the source of truth for the `rec_center_equipment` seed
+(migration `20261019000008_pennington_equipment_list.sql`); if the two drift, the document wins
+and the migration gets a follow-up.
 
-Source: team recollection, 2026-10-11. A verified walk-through is still pending. This file is
-the source of truth for the `rec_center_equipment` seed until that happens.
+Every row below has `is_verified = true` in the database because it comes from a written list.
+If that list was itself compiled from memory, flip rows back to `false` until someone checks.
 
-Good enough to build the substitution engine against. Not good enough to ship a filter that
-tells a student a machine exists when it doesn't — treat counts as provisional and re-verify
-before that feature goes live.
+## How the weight columns are read
 
-> **DEMO DATA (2026-10-17).** Migration `0008_demo_equipment_and_exercises.sql` adds
-> placeholder equipment that is **not** in this doc: Olympic barbells + plates (45/35/25/10/5/2.5),
-> flat benches, calf raise, hip adduction, ab crunch, hip thrust, leg press, Smith machine,
-> pull-up/dip station, treadmills, bikes, rowers, ellipticals — plus 17 exercises that use them.
-> Every such row has `notes` starting with `DEMO` and `is_verified = false`; the app shows a
-> "Demo" badge on those exercises. The removal SQL is at the top of that migration. This doc is
-> still the source of truth for the **real** inventory.
+The document gives min, max and "increment" per machine. The increment means different things
+for different gear, so each row records a `load_kind`:
+
+| Kind | Reachable loads | Example |
+| --- | --- | --- |
+| `stack` | min + k × step | Leg extension 12.5 → 200 in 12.5 lb pins |
+| `plates` | min + k × **2** × step — step is the smallest plate, loaded on both sides | Bench 45 lb bar, 2.5 lb plates → 5 lb jumps |
+| `fixed_set` | min + k × step, plus max | Dumbbells 5 → 125 in 5 lb steps |
+
+Suggested loads are always rounded to one of these (`lib/core/training/equipment_loads.dart`).
+
+## Barbell stations (plate loaded)
+
+| Equipment | Count | Range (lb) | Smallest plate |
+| --- | --- | --- | --- |
+| Flat barbell bench press | 2 | 45–600 | 2.5 |
+| Incline barbell bench press | 2 | 45–600 | 2.5 |
+| Decline bench press | 1 | 45–500 | 2.5 |
+| Shoulder press (barbell) | 1 | 45–500 | 2.5 |
+| Deadlift | 1 | 45–500 | 2.5 |
+| Smith machine | 2 | 45–600 | 2.5 |
+| T-bar | 1 | 45–250 | 2.5 |
+
+**There is no free squat rack.** Squats are on the Smith machine; the old `squat_rack` row is
+kept as `out_of_service` with quantity 0 so history still resolves.
+
+## Standard 4-station Multi-Jungle × 2
+
+| Station | Range (lb) | Step |
+| --- | --- | --- |
+| 1. Lat pulldown (bridge has a pull-up / chin-up bar) | 10–295 | 5 |
+| 2. Seated cable row | 10–295 | 5 |
+| 3. Fixed high pulley | 10–200 | 5 |
+| 4. Adjustable cable column | 10–200 | 5 |
+
+Paramount PFT-200 functional trainer: 3 units, 5–85 lb, 5 lb steps.
+
+## Selectorized machines
+
+| Equipment | Count | Range (lb) | Step |
+| --- | --- | --- | --- |
+| Precor Discovery leg press | 1 | 0–400 | 20 |
+| Seated leg press | 1 | 20–400 | 20 |
+| Dual axis overhead press | 2 | 10–205 | 5 |
+| Leg extension | 2 | 12.5–200 | 12.5 |
+| Rotary calf | 2 | 10–405 | 5 |
+| Lateral raise | 2 | 10–205 | 5 |
+| Seated leg curl | 2 | 10–205 | 5 |
+| Hip adduction (inner thigh)* | 1 | 10–205 | 5 |
+| Hip abduction (outer thigh) | 1 | 10–205 | 5 |
+| Torso rotation | 1 | 10–205 | 5 |
+| Rotary hip | 1 | 12.5–200 | 12.5 |
+| Incline press | 2 | 10–305 | 5 |
+| Dual axis row / rear delt | 2 | 10–305 | 5 |
+| Dual axis pulldown | 2 | 10–305 | 5 |
+| Back extension | 1 | 10–305 | 5 |
+| Dual axis chest press | 2 | 10–305 | 5 |
+| Ab crunch | 2 | 10–205 | 5 |
+| Arm extension | 2 | 10–205 | 5 |
+| Arm curl | 2 | 10–205 | 5 |
+| Hip thrust | 1 | 0–420 | 20 |
+| Pec dec fly | 1 | 20–250 | 10 |
+| Kick backs (glute) | 1 | 12.5–150 | 12.5 |
+
+\* The document says "Hip Abduction (inner)". Inner-thigh pads that you squeeze together are
+adduction, so it is recorded as adduction.
+
+## Plate-loaded machines
+
+| Equipment | Count | Range (lb) | Smallest plate |
+| --- | --- | --- | --- |
+| Hammer Strength iso-lateral row | 1 | 25–400 | 2.5 |
+| Seated calf raise | 1 | 45–550 | 2.5 |
+| Hammer Strength iso-lateral leg press | 1 | 45–600 | 2.5 |
+| Hammer Strength iso-lateral leg press (single leg) | 1 | 45–600 | 2.5 |
+| Precor angled leg press (DPL0601) | 1 | 45–800 | 2.5 |
+| Free-weight preacher curl | 2 | 15–400 | 2.5 |
 
 ## Free weights
 
-### Dumbbells
+| Equipment | Count | Range | Step |
+| --- | --- | --- | --- |
+| Dumbbells | 2 of each weight | 5–125 lb | 5 lb |
+| EZ curl bars (fixed) | 1 | 20–60 lb | 10 lb |
+| Barbells (fixed) | 1 | 20–110 lb | 10 lb |
+| Kettlebells | 1–5 per weight | 3–24 **kg** | 2 kg |
+| Rubber medicine balls | 1–4 per weight | 4–20 (unit not given; lb assumed) | 4 |
 
-| | |
+## Benches, stations, cardio
+
+| Equipment | Count |
 | --- | --- |
-| Denominations | 1 lb, 2.5 lb, 5 lb, then **5 lb increments to 165 lb** |
-| Resolved set | 1, 2.5, 5, 10, 15, 20, 25, … 160, 165 |
-| Count | 35 pairs |
+| Adjustable benches | 5 |
+| Fixed seated dumbbell shoulder press | 2 |
+| Dip station | 2 |
+| Glute ham developer | 4 |
+| Decline abdominal bench | 1 |
+| Feet-elevated crunch machine | 2 |
+| Indoor cycling | 6 |
+| Elliptical | 17 |
+| Treadmill | 16 |
+| StairMaster | 4 |
+| Rowing machine | 4 |
 
-This is the **load quantization table for every dumbbell exercise.** When the recommendation
-engine suggests a jump, it must round to one of these — proposing 42.5 lb when the rack jumps
-10 → 15 is a bug the user feels immediately. See `ai-coach-engineer`.
+## Still worth checking on the floor
 
-### Racks and platforms
-
-| Equipment | Count | Notes |
-| --- | --- | --- |
-| Squat rack | 4 | |
-| "Free weights" | 3 | **AMBIGUOUS** — benches? platforms? barbell stations? See open questions. |
-| "Machine" | 1 | **AMBIGUOUS** — unspecified. See open questions. |
-
-## Machines and stations
-
-| Equipment | Count | Notes |
-| --- | --- | --- |
-| Hamstring curl | 2 | |
-| Leg extension | 2 | |
-| Bench press | 2 | |
-| Incline bench press | 2 | |
-| Cable row | 2 | |
-| Lat pulldown | 2 | Attachments: **wide**, **close**, **neutral** grip |
-| Back row | 2 | Distinct from cable row per the source |
-| Adjustable cable station | 3 | Height-adjustable; fly, press, and general use |
-| Pec deck fly | 1 | |
-| Rear delt fly | 2 | |
-| Tricep pushdown | 4 | **2 of the 4 are height-adjustable** |
-
-Total catalogued stations: **24** machines/stations, or **28** counting the 4 squat racks
-(excluding dumbbells and the two ambiguous rows).
-
-> Corrected 2026-10-11: an earlier revision of this file said 26, which did not reconcile
-> with its own per-row counts. The per-row numbers above are authoritative; settle the true
-> total on the floor walk.
-
-## What this covers, and what it leaves exposed
-
-Mapping against the 16 muscle groups in `CLAUDE.md` → **Assets**:
-
-| Muscle group | Covered by | Depth |
-| --- | --- | --- |
-| `chest_lower` | bench press ×2, pec deck ×1, cables ×3 | good |
-| `chest_upper` | incline bench ×2, cables ×3 | good |
-| `lats` | lat pulldown ×2, cable row ×2, back row ×2 | good |
-| `biceps` | dumbbells, cables ×3 | adequate |
-| `triceps` | tricep pushdown ×4, cables | good |
-| `delts_front` / `delts_side` | dumbbells, cables | adequate |
-| `delts_rear` | rear delt fly ×2, cables | good |
-| `quads` | squat rack ×4, leg extension ×2 | good |
-| `hamstrings` | hamstring curl ×2, squat rack | adequate |
-| `glutes` | squat rack ×4 | **thin** — no hip thrust or glute machine listed |
-| `calves` | — | **NOT COVERED** — no calf raise machine listed |
-| `adductors` | — | **NOT COVERED** — no adductor machine listed |
-| `forearms` | dumbbells | incidental only |
-| `abs` | — | **NOT COVERED** — no ab station listed |
-| `traps_upper` | dumbbells (shrugs) | adequate |
-
-**Four of the sixteen muscle groups have no dedicated equipment in this list.** Either the Rec
-Center has gear not yet recalled, or those groups need bodyweight / dumbbell / outdoor
-alternatives in the exercise catalog. The muscle map will show cold spots for `calves`,
-`adductors`, and `abs` until that is resolved — which would look like a bug.
-
-## Open questions for the floor walk
-
-1. **"3 free weights" — what are these?** Flat benches? Barbell platforms? Olympic bars?
-   The substitution engine needs the actual equipment type.
-2. **"1 machine" — which machine?** Currently unusable as data.
-3. **Barbells**: how many, and are they standard 45 lb Olympic bars? Needed for barbell load
-   quantization the same way the dumbbell table is.
-4. **Plate denominations** — 45 / 35 / 25 / 10 / 5 / 2.5 lb? This sets the minimum jump on
-   every barbell lift.
-5. **Calf raise, adductor/abductor, ab station, hip thrust** — present or genuinely absent?
-6. **Leg press** — not mentioned; present?
-7. **Cardio equipment** — treadmills, bikes, rowers, ellipticals, and counts. Needed for the
-   weight-loss goal plans.
-8. **Smith machine** — present?
-9. **Busiest hours**, if known — feeds the "machine likely occupied" heuristic.
-
-## How this becomes data
-
-Each row above becomes a `rec_center_equipment` record with an availability status.
-`exercises.required_equipment` references those types, and the swap logic answers
-"this is occupied — what else trains the same primary muscles with available equipment?"
-
-Keep this file in sync with the seed migration. If they drift, this file wins and the migration
-gets regenerated.
+- **Kettlebell denominations.** 3 kg + 2 kg steps never reaches 24 kg; the real set is probably
+  4, 6, 8 … 24 or 4, 8, 12, 16, 20, 24. The seed generates 3, 5 … 23 plus 24.
+- **Medicine ball unit** (lb assumed).
+- **Plate denominations.** Only the smallest (2.5 lb) is listed. That sets the smallest jump,
+  which is what matters most, but the 45/35/25/10/5 assumption in `load_quantization.dart` is
+  still an assumption.
+- **"Incline Press"** is listed separately from the incline barbell bench — recorded as a
+  selectorized machine.

@@ -59,3 +59,6 @@ supabase/.temp/
 
 # Generated / optimized 3D assets
 assets/muscleAnatomy.optimized.glb
+
+# Vercel project link (deploys go through tool/deploy_web.sh)
+.vercel

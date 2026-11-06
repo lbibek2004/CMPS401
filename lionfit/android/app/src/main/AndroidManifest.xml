@@ -1,8 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Supabase. Debug builds get this implicitly; release builds do not. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- The rest timer buzzes for 3 s when rest is over (MainActivity.kt). -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <!-- Health Connect, read-only, three types (lib/features/health/). Each
+         line here is one toggle on Health Connect's consent screen; add a
+         type only when a screen shows it. No WRITE_*, no background or
+         history access: LionFit reads today's values while it is open. -->
+    <uses-permission android:name="android.permission.health.READ_STEPS"/>
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
+    <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE"/>
     <application
-        android:label="lionfit"
+        android:label="LionFit"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
@@ -29,7 +38,25 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Health Connect (Android 13 and older) asks the app to show
+                 why it wants health data. MainActivity.kt opens the
+                 /health-privacy page for it. -->
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"/>
+            </intent-filter>
         </activity>
+        <!-- The same privacy page on Android 14+, where Health Connect is part
+             of the system. Only the system may launch it (the permission). -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE"/>
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS"/>
+            </intent-filter>
+        </activity-alias>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -45,6 +72,12 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Health Connect as an app (Android 13 and older): lets the plugin
+             see whether it is installed. -->
+        <package android:name="com.google.android.apps.healthdata"/>
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"/>
         </intent>
     </queries>
 </manifest>
